@@ -1,261 +1,311 @@
---// Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-
---// Settings
-local aimbotEnabled = false
-local tracersEnabled = true
-local espEnabled = false
-local autoDodgeEnabled = false
-local aimRadius = 300
-local tracerThickness = 2
-local aimSmoothing = 5
-local tracers = {}
-local espBoxes = {}
-
--- FOV Circle
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Radius = aimRadius
-FOVCircle.Thickness = 1
-FOVCircle.Color = Color3.fromRGB(0, 255, 0)
-FOVCircle.Transparency = 1
-FOVCircle.Filled = false
-FOVCircle.Visible = true
-
 --// GUI Setup
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local MainFrame = Instance.new("Frame")
+local Sidebar = Instance.new("Frame")
+local ContentFrame = Instance.new("Frame")
+
+-- Add to Player GUI
+ScreenGui.Name = "Seb X"
+ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 
 -- Main Frame
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 400, 0, 600)
-MainFrame.Position = UDim2.new(0.05, 0, 0.05, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+MainFrame.Size = UDim2.new(0.8, 0, 0.7, 0)
+MainFrame.Position = UDim2.new(0.1, 0, 0.15, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Parent = ScreenGui
 
--- Dragging Functionality
-local dragging, dragStart, startPos
-MainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
-    end
+-- Main Frame Glow
+local mainGlow = Instance.new("UIStroke")
+mainGlow.Thickness = 5
+mainGlow.Color = Color3.fromRGB(0, 255, 150)
+mainGlow.Transparency = 0.4
+mainGlow.Parent = MainFrame
+
+-- Sidebar
+Sidebar.Size = UDim2.new(0, 120, 1, 0)
+Sidebar.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = Sidebar
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 5)
+
+-- Content Frame
+ContentFrame.Size = UDim2.new(1, -120, 1, 0)
+ContentFrame.Position = UDim2.new(0, 120, 0, 0)
+ContentFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+ContentFrame.BorderSizePixel = 0
+ContentFrame.Parent = MainFrame
+
+-- Minimize Button
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Size = UDim2.new(0, 30, 0, 30)
+MinimizeButton.Position = UDim2.new(1, -80, 0, 5)
+MinimizeButton.Text = "━"
+MinimizeButton.Font = Enum.Font.GothamBold
+MinimizeButton.TextSize = 20
+MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeButton.BackgroundTransparency = 1
+MinimizeButton.Parent = MainFrame
+
+local minimized = false
+local RestoreButton = Instance.new("TextButton")
+RestoreButton.Size = UDim2.new(0, 60, 0, 30)
+RestoreButton.Position = UDim2.new(0, 10, 1, -40)
+RestoreButton.Text = "Show"
+RestoreButton.Font = Enum.Font.GothamBold
+RestoreButton.TextSize = 16
+RestoreButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+RestoreButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+RestoreButton.BorderSizePixel = 0
+RestoreButton.Visible = false
+RestoreButton.Parent = ScreenGui
+
+MinimizeButton.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    MainFrame.Visible = not minimized
+    RestoreButton.Visible = minimized
 end)
 
-MainFrame.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
+RestoreButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = true
+    RestoreButton.Visible = false
 end)
 
-MainFrame.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
+-- Close Button
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 30, 0, 30)
+CloseButton.Position = UDim2.new(1, -45, 0, 5)
+CloseButton.Text = "✖"
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.TextSize = 20
+CloseButton.TextColor3 = Color3.fromRGB(255, 50, 50)
+CloseButton.BackgroundTransparency = 1
+CloseButton.Parent = MainFrame
+
+CloseButton.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
 end)
 
--- Title Bar
-local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 50)
-TitleBar.Position = UDim2.new(0, 0, 0, 0)
-TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-TitleBar.BorderSizePixel = 0
-TitleBar.Parent = MainFrame
+-- Page Management
+local pages = {}
+local function switchToPage(pageName)
+    for name, page in pairs(pages) do
+        page.Visible = (name == pageName)
+    end
+end
 
-local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Text = "Aimbot & Modes GUI"
-TitleLabel.Size = UDim2.new(1, 0, 1, 0)
-TitleLabel.Position = UDim2.new(0, 0, 0, 0)
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.Font = Enum.Font.SourceSansBold
-TitleLabel.TextSize = 20
-TitleLabel.Parent = TitleBar
+-- Sidebar Button Creator
+local function createSidebarButton(text, parent, callback)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 0, 40)
+    button.Text = text
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 16
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    button.BorderSizePixel = 0
+    button.Parent = parent
 
--- Add Toggle Buttons
-local function addToggleButton(parent, name, position, callback)
-    local Button = Instance.new("TextButton")
-    Button.Text = name .. ": OFF"
-    Button.Size = UDim2.new(0, 360, 0, 50)
-    Button.Position = UDim2.new(0, 20, 0, position)
-    Button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Button.Font = Enum.Font.SourceSansBold
-    Button.TextSize = 18
-    Button.Parent = parent
-
-    Button.MouseButton1Click:Connect(function()
-        local state = callback()
-        Button.Text = name .. ": " .. (state and "ON" or "OFF")
-        Button.BackgroundColor3 = state and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    button.MouseEnter:Connect(function()
+        button.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
     end)
+    button.MouseLeave:Connect(function()
+        button.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    end)
+
+    button.MouseButton1Click:Connect(callback)
 end
 
--- Add Settings Toggles
-addToggleButton(MainFrame, "Aimbot", 60, function()
-    aimbotEnabled = not aimbotEnabled
-    return aimbotEnabled
-end)
+-- Default Home Page
+local homePage = Instance.new("Frame")
+homePage.Size = UDim2.new(1, 0, 1, 0)
+homePage.BackgroundTransparency = 1
+homePage.Parent = ContentFrame
+pages["Home"] = homePage
 
-addToggleButton(MainFrame, "Auto Dodge", 120, function()
-    autoDodgeEnabled = not autoDodgeEnabled
-    return autoDodgeEnabled
-end)
+local welcomeLabel = Instance.new("TextLabel")
+welcomeLabel.Size = UDim2.new(1, -10, 0, 40)
+welcomeLabel.Position = UDim2.new(0, 5, 0, 10)
+welcomeLabel.Text = "Welcome to Seb X!"
+welcomeLabel.Font = Enum.Font.GothamBold
+welcomeLabel.TextSize = 24
+welcomeLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+welcomeLabel.BackgroundTransparency = 1
+welcomeLabel.Parent = homePage
 
-addToggleButton(MainFrame, "ESP (Wallhack)", 180, function()
-    espEnabled = not espEnabled
-    return espEnabled
-end)
+local infoLabel = Instance.new("TextLabel")
+infoLabel.Size = UDim2.new(1, -10, 0, 120)
+infoLabel.Position = UDim2.new(0, 5, 0, 60)
+infoLabel.Text = "What's New:\n- Tracers for debugging\n- Aim practice trainer\n- Modern UI design!"
+infoLabel.Font = Enum.Font.Gotham
+infoLabel.TextSize = 18
+infoLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+infoLabel.TextWrapped = true
+infoLabel.BackgroundTransparency = 1
+infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+infoLabel.TextYAlignment = Enum.TextYAlignment.Top
+infoLabel.Parent = homePage
 
-addToggleButton(MainFrame, "Tracers", 240, function()
-    tracersEnabled = not tracersEnabled
-    return tracersEnabled
-end)
+createSidebarButton("Home", Sidebar, function() switchToPage("Home") end)
 
-addToggleButton(MainFrame, "Show FOV Circle", 300, function()
-    FOVCircle.Visible = not FOVCircle.Visible
-    return FOVCircle.Visible
-end)
+-- Features Page
+local featuresPage = Instance.new("Frame")
+featuresPage.Size = UDim2.new(1, 0, 1, 0)
+featuresPage.BackgroundTransparency = 1
+featuresPage.Visible = false
+featuresPage.Parent = ContentFrame
+pages["Features"] = featuresPage
 
--- Update FOV Circle
-RunService.RenderStepped:Connect(function()
-    FOVCircle.Position = UserInputService:GetMouseLocation()
-    FOVCircle.Radius = aimRadius
-end)
+local featuresLabel = Instance.new("TextLabel")
+featuresLabel.Size = UDim2.new(1, -10, 0, 40)
+featuresLabel.Position = UDim2.new(0, 5, 0, 10)
+featuresLabel.Text = "Features"
+featuresLabel.Font = Enum.Font.GothamBold
+featuresLabel.TextSize = 24
+featuresLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+featuresLabel.BackgroundTransparency = 1
+featuresLabel.Parent = featuresPage
 
--- Visibility and Team Check
-local function isEnemy(player)
-    if player.Team and LocalPlayer.Team then
-        return player.Team ~= LocalPlayer.Team
-    end
-    return true
-end
+-- Add Tracers Button to Features Page
+local function addTracers()
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local part = Instance.new("Part", workspace)
+            part.Size = Vector3.new(0.1, 0.1, 0.1)
+            part.Anchored = true
+            part.CanCollide = false
+            part.Transparency = 1 -- Invisible part to attach the tracer
 
-local function isVisible(targetPart)
-    local origin = Camera.CFrame.Position
-    local direction = (targetPart.Position - origin).Unit * 1000
-    local rayParams = RaycastParams.new()
-    rayParams.FilterDescendantsInstances = {LocalPlayer.Character, targetPart.Parent}
-    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+            local beam = Instance.new("Beam", part)
+            beam.FaceCamera = true
+            beam.Color = ColorSequence.new(Color3.fromRGB(255, 0, 0)) -- Red line
+            beam.Width0 = 0.1
+            beam.Width1 = 0.1
+            beam.Attachment0 = Instance.new("Attachment", part)
+            beam.Attachment1 = Instance.new("Attachment", player.Character:FindFirstChild("HumanoidRootPart"))
 
-    local result = workspace:Raycast(origin, direction, rayParams)
-    return result and result.Instance == targetPart
-end
-
--- Get Closest Target
-local function getClosestTarget()
-    local closestPlayer = nil
-    local shortestDistance = aimRadius
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and isEnemy(player) and player.Character:FindFirstChild("HumanoidRootPart") then
-            local head = player.Character:FindFirstChild("Head") or player.Character:FindFirstChild("HumanoidRootPart")
-            if head then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
-                local distance = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                if onScreen and distance < shortestDistance and isVisible(head) then
-                    closestPlayer = player
-                    shortestDistance = distance
+            -- Update tracer position
+            game:GetService("RunService").RenderStepped:Connect(function()
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    part.Position = game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart").Position
+                else
+                    part:Destroy()
                 end
-            end
-        end
-    end
-    return closestPlayer
-end
-
--- Aimbot Logic
-RunService.RenderStepped:Connect(function()
-    if aimbotEnabled then
-        local target = getClosestTarget()
-        if target and target.Character and target.Character:FindFirstChild("Head") then
-            local targetPart = target.Character:FindFirstChild("Head")
-            local direction = (targetPart.Position - Camera.CFrame.Position).Unit
-            local targetCFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + direction)
-            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, aimSmoothing / 100)
-        end
-    end
-end)
-
--- Auto Dodge Logic
-local function dodgeThreat()
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
-    local humanoidRootPart = LocalPlayer.Character.HumanoidRootPart
-
-    -- Loop through all moving objects in the workspace
-    for _, object in ipairs(workspace:GetDescendants()) do
-        if object:IsA("BasePart") and object.Velocity.Magnitude > 10 then
-            local distance = (object.Position - humanoidRootPart.Position).Magnitude
-            if distance < 15 then -- Dodge if within a 15-stud radius
-                local dodgeDirection = (humanoidRootPart.Position - object.Position).Unit * 10
-                humanoidRootPart.CFrame = humanoidRootPart.CFrame + dodgeDirection
-                break
-            end
+            end)
         end
     end
 end
 
-RunService.RenderStepped:Connect(function()
-    if autoDodgeEnabled then
-        dodgeThreat()
-    end
+local tracersButton = Instance.new("TextButton")
+tracersButton.Size = UDim2.new(1, -10, 0, 40)
+tracersButton.Position = UDim2.new(0, 5, 0, 150)
+tracersButton.Text = "Toggle Tracers"
+tracersButton.Font = Enum.Font.GothamBold
+tracersButton.TextSize = 16
+tracersButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+tracersButton.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+tracersButton.Parent = pages["Features"]
+
+tracersButton.MouseButton1Click:Connect(function()
+    addTracers()
 end)
+local function toggleAimbot()
+    local aimEnabled = false
 
--- ESP Logic
-RunService.RenderStepped:Connect(function()
-    for _, esp in ipairs(espBoxes) do
-        esp:Remove()
+    -- Function to check if a player is on the same team as the local player
+    local function isOnSameTeam(player)
+        return player.Team == game.Players.LocalPlayer.Team
     end
-    espBoxes = {}
 
-    if espEnabled then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character and isEnemy(player) then
-                local head = player.Character:FindFirstChild("Head")
-                if head then
-                    local headPos, onScreen = Camera:WorldToViewportPoint(head.Position)
-                    if onScreen then
-                        local espBox = Drawing.new("Text")
-                        espBox.Text = player.Name
-                        espBox.Position = Vector2.new(headPos.X, headPos.Y - 20)
-                        espBox.Color = Color3.fromRGB(255, 0, 0)
-                        espBox.Size = 16
-                        espBox.Visible = true
-                        table.insert(espBoxes, espBox)
+    -- Function to find the nearest enemy
+    local function getNearestEnemy()
+        local player = game.Players.LocalPlayer
+        local nearestEnemy = nil
+        local shortestDistance = math.huge
+
+        for _, otherPlayer in ipairs(game.Players:GetPlayers()) do
+            if otherPlayer ~= player and otherPlayer.Team ~= player.Team then
+                local character = otherPlayer.Character
+                if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid").Health > 0 then
+                    -- Check if the enemy is visible (no wall between player and enemy)
+                    local origin = workspace.CurrentCamera.CFrame.Position
+                    local direction = (character.HumanoidRootPart.Position - origin).unit
+                    local ray = Ray.new(origin, direction * 1000)
+                    local hit, position = workspace:FindPartOnRay(ray, player.Character)
+
+                    if hit and hit:IsDescendantOf(character) then
+                        local distance = (character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                        if distance < shortestDistance then
+                            nearestEnemy = character.HumanoidRootPart
+                            shortestDistance = distance
+                        end
                     end
                 end
             end
         end
+        return nearestEnemy
     end
-end)
 
--- Tracers Logic
-RunService.RenderStepped:Connect(function()
-    for _, tracer in ipairs(tracers) do
-        tracer:Remove()
-    end
-    tracers = {}
-
-    if tracersEnabled then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                local rootPart = player.Character.HumanoidRootPart
-                local rootPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
-                if onScreen then
-                    local tracerLine = Drawing.new("Line")
-                    tracerLine.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-                    tracerLine.To = Vector2.new(rootPos.X, rootPos.Y)
-                    tracerLine.Color = Color3.fromRGB(255, 0, 0)
-                    tracerLine.Thickness = tracerThickness
-                    tracerLine.Visible = true
-                    table.insert(tracers, tracerLine)
-                end
+    -- Update aimbot position if enabled
+    game:GetService("RunService").RenderStepped:Connect(function()
+        if aimEnabled then
+            local target = getNearestEnemy()
+            if target then
+                local camera = workspace.CurrentCamera
+                camera.CFrame = CFrame.new(camera.CFrame.Position, target.Position)
             end
         end
+    end)
+
+    -- Toggle aimbot on or off
+    return function()
+        aimEnabled = not aimEnabled
     end
+end
+
+local aimbotToggle = toggleAimbot()
+
+local aimbotButton = Instance.new("TextButton")
+aimbotButton.Size = UDim2.new(1, -10, 0, 40)
+aimbotButton.Position = UDim2.new(0, 5, 0, 200)
+aimbotButton.Text = "Toggle Aimbot"
+aimbotButton.Font = Enum.Font.GothamBold
+aimbotButton.TextSize = 16
+aimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+aimbotButton.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+aimbotButton.Parent = pages["Features"]
+
+aimbotButton.MouseButton1Click:Connect(function()
+    aimbotToggle()
 end)
+
+createSidebarButton("Features", Sidebar, function() switchToPage("Features") end)
+
+-- Settings Page
+local settingsPage = Instance.new("Frame")
+settingsPage.Size = UDim2.new(1, 0, 1, 0)
+settingsPage.BackgroundTransparency = 1
+settingsPage.Visible = false
+settingsPage.Parent = ContentFrame
+pages["Settings"] = settingsPage
+
+local settingsLabel = Instance.new("TextLabel")
+settingsLabel.Size = UDim2.new(1, -10, 0, 40)
+settingsLabel.Position = UDim2.new(0, 5, 0, 10)
+settingsLabel.Text = "Settings"
+settingsLabel.Font = Enum.Font.GothamBold
+settingsLabel.TextSize = 24
+settingsLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+settingsLabel.BackgroundTransparency = 1
+settingsLabel.Parent = settingsPage
+
+-- Additional settings can be added here
+
+createSidebarButton("Settings", Sidebar, function() switchToPage("Settings") end)
+
+-- Default Page
+switchToPage("Home")
